@@ -1,1 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:xsi="http://w3.org"
+                  xmlns:bpmn="http://omg.org"
+                  xmlns:bpmndi="http://omg.org"
+                  xmlns:dc="http://omg.org"
+                  xmlns:di="http://omg.org"
+                  id="Definitions_E2ELending"
+                  targetNamespace="http://bpmn.io">
 
+  <bpmn:collaboration id="Collaboration_OnlineLending">
+    <bpmn:participant id="Participant_Client" name="Клиент" processRef="Process_Client" />
+    <bpmn:participant id="Participant_Bank" name="Т-Банк (E2E Кредитный конвейер)" processRef="Process_Bank" />
+
+    <!-- Потоки сообщений (Message Flows) между Клиентом и Банком -->
+    <bpmn:messageFlow id="MsgFlow_SubmitApp" name="Заявка + согласие БКИ" sourceRef="Task_Client_Submit" targetRef="StartEvent_Bank_Receive" />
+    <bpmn:messageFlow id="MsgFlow_SendOffer" name="Предодобренная оферта" sourceRef="Task_OMS_ShowOffer" targetRef="Event_Client_ReceiveOffer" />
+    <bpmn:messageFlow id="MsgFlow_SendRejection" name="Уведомление об отказе" sourceRef="Task_OMS_NotifyReject" targetRef="Event_Client_ReceiveReject" />
+    <bpmn:messageFlow id="MsgFlow_SignPEP" name="СМС-код (ПЭП)" sourceRef="Task_Client_Sign" targetRef="Event_OMS_ReceiveSign" />
+    <bpmn:messageFlow id="MsgFlow_MoneyNotice" name="Пуш о зачислении" sourceRef="Task_ABS_Disburse" targetRef="EndEvent_Client_Success" />
+  </bpmn:collaboration>
+
+  <!-- ПРОЦЕСС КЛИЕНТА -->
+  <bpmn:process id="Process_Client" isExecutable="false">
+    <bpmn:startEvent id="StartEvent_Client" name="Потребность в кредите">
+      <bpmn:outgoing>Flow_C1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Client_Submit" name="Выбрать сумму, срок и отправить заявку">
+      <bpmn:incoming>Flow_C1</bpmn:incoming>
+      <bpmn:outgoing>Flow_C2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:eventBasedGateway id="Gateway_Client_WaitDecision" name="Ожидание решения">
+      <bpmn:incoming>Flow_C2</bpmn:incoming>
+      <bpmn:outgoing>Flow_C3</bpmn:outgoing>
+      <bpmn:outgoing>Flow_C4</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Event_Client_ReceiveReject" name="Получен отказ">
+      <bpmn:incoming>Flow_C3</bpmn:incoming>
+      <bpmn:outgoing>Flow_C5</bpmn:outgoing>
+      <bpmn:messageEventDefinition />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="EndEvent_Client_Rejected" name="Кредит не выдан">
+      <bpmn:incoming>Flow_C5</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:intermediateCatchEvent id="Event_Client_ReceiveOffer" name="Получена оферта">
+      <bpmn:incoming>Flow_C4</bpmn:incoming>
+      <bpmn:outgoing>Flow_C6</bpmn:outgoing>
+      <bpmn:messageEventDefinition />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:userTask id="Task_Client_Sign" name="Подписать договор кодом ПЭП">
+      <bpmn:incoming>Flow_C6</bpmn:incoming>
+      <bpmn:outgoing>Flow_C7</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="EndEvent_Client_Success" name="Средства получены">
+      <bpmn:incoming>Flow_C7</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:sequenceFlow id="Flow_C1" sourceRef="StartEvent_Client" targetRef="Task_Client_Submit" />
+    <bpmn:sequenceFlow id="Flow_C2" sourceRef="Task_Client_Submit" targetRef="Gateway_Client_WaitDecision" />
+    <bpmn:sequenceFlow id="Flow_C3" sourceRef="Gateway_Client_WaitDecision" targetRef="Event_Client_ReceiveReject" />
+    <bpmn:sequenceFlow id="Flow_C4" sourceRef="Gateway_Client_WaitDecision" targetRef="Event_Client_ReceiveOffer" />
+    <bpmn:sequenceFlow id="Flow_C5" sourceRef="Event_Client_ReceiveReject" targetRef="EndEvent_Client_Rejected" />
+    <bpmn:sequenceFlow id="Flow_C6" sourceRef="Event_Client_ReceiveOffer" targetRef="Task_Client_Sign" />
+    <bpmn:sequenceFlow id="Flow_C7" sourceRef="Task_Client_Sign" targetRef="EndEvent_Client_Success" />
+  </bpmn:process>
+
+  <!-- ПРОЦЕСС БАНКА -->
+  <bpmn:process id="Process_Bank" isExecutable="true">
+    <bpmn:laneSet id="LaneSet_Bank">
+      <bpmn:lane id="Lane_OMS" name="Фронт-офис / ДБО и OMS">
+        <bpmn:flowNodeRef>StartEvent_Bank_Receive</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OMS_Register</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_CheckClient</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OMS_FillProfile</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_MergeClient</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OMS_NotifyReject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Bank_Rejected</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_OMS_ShowOffer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_OMS_ReceiveSign</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>BoundaryEvent_SignTimeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Bank_Expired</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_DisbursementType</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_SPR" name="СПР и ML-скоринг">
+        <bpmn:flowNodeRef>Gateway_ParallelSplit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SPR_BKI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SPR_Gosuslugi</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SPR_Antifraud</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ParallelJoin</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ML_Scoring</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ScoringDecision</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_ABS" name="АБС (Core Banking)">
+        <bpmn:flowNodeRef>Task_ABS_OpenAccount</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ABS_Disburse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Bank_IssuedOnline</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Courier" name="Курьерская служба (Представитель)">
+        <bpmn:flowNodeRef>Task_Courier_KYC</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Courier_Activate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>EndEvent_Bank_IssuedOffline</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+
+    <!-- Элементы дорожки OMS -->
+    <bpmn:startEvent id="StartEvent_Bank_Receive" name="Заявка получена">
+      <bpmn:outgoing>Flow_B1</bpmn:outgoing>
+      <bpmn:messageEventDefinition />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_OMS_Register" name="Зарегистрировать заявку (application_id)">
+      <bpmn:incoming>Flow_B1</bpmn:incoming>
+      <bpmn:outgoing>Flow_B2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_CheckClient" name="Клиент идентифицирован (is_identified)?">
+      <bpmn:incoming>Flow_B2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Existing</bpmn:outgoing>
+      <bpmn:outgoing>Flow_NewClient</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_OMS_FillProfile" name="Создать профиль по анкете / ЕСИА">
+      <bpmn:incoming>Flow_NewClient</bpmn:incoming>
+      <bpmn:outgoing>Flow_NewMerged</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_MergeClient">
+      <bpmn:incoming>Flow_Existing</bpmn:incoming>
+      <bpmn:incoming>Flow_NewMerged</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToSPR</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- Элементы дорожки СПР и ML -->
+    <bpmn:parallelGateway id="Gateway_ParallelSplit" name="Параллельный опрос">
+      <bpmn:incoming>Flow_ToSPR</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToBKI</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToGos</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ToAF</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="Task_SPR_BKI" name="Запросить кредитную историю (БКИ)">
+      <bpmn:incoming>Flow_ToBKI</bpmn:incoming>
+      <bpmn:outgoing>Flow_FromBKI</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_SPR_Gosuslugi" name="Получить доходы (СФР / ФНС)">
+      <bpmn:incoming>Flow_ToGos</bpmn:incoming>
+      <bpmn:outgoing>Flow_FromGos</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_SPR_Antifraud" name="Проверить Device ID и SIM (Антифрод)">
+      <bpmn:incoming>Flow_ToAF</bpmn:incoming>
+      <bpmn:outgoing>Flow_FromAF</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="Gateway_ParallelJoin" name="Агрегация данных">
+      <bpmn:incoming>Flow_FromBKI</bpmn:incoming>
+      <bpmn:incoming>Flow_FromGos</bpmn:incoming>
+      <bpmn:incoming>Flow_FromAF</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToML</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:serviceTask id="Task_ML_Scoring" name="Рассчитать PD, ПДН, лимит и ставку">
+      <bpmn:incoming>Flow_ToML</bpmn:incoming>
+      <bpmn:outgoing>Flow_ToDecision</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gateway_ScoringDecision" name="Заявка одобрена?">
+      <bpmn:incoming>Flow_ToDecision</bpmn:incoming>
+      <bpmn:outgoing>Flow_Rejected</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
+    <!-- Ветка отказа -->
+    <bpmn:sendTask id="Task_OMS_NotifyReject" name="Отправить отказ клиенту">
+      <bpmn:incoming>Flow_Rejected</bpmn:incoming>
+      <bpmn:outgoing>Flow_EndReject</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="EndEvent_Bank_Rejected" name="Отказ зафиксирован">
+      <bpmn:incoming>Flow_EndReject</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <!-- Ветка одобрения и подписания -->
+    <bpmn:sendTask id="Task_OMS_ShowOffer" name="Отобразить оферту в приложении">
+      <bpmn:incoming>Flow_Approved</bpmn:incoming>
+      <bpmn:outgoing>Flow_WaitSign</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="Event_OMS_ReceiveSign" name="Получить подтверждение ПЭП">
+      <bpmn:incoming>Flow_WaitSign</bpmn:incoming>
+      <bpmn:outgoing>Flow_Signed</bpmn:outgoing>
+    </bpmn:receiveTask>

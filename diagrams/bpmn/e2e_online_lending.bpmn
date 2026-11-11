@@ -11,20 +11,18 @@
     <bpmn:participant id="Participant_Client" name="Клиент" processRef="Process_Client" />
     <bpmn:participant id="Participant_Bank" name="Т-Банк (E2E Кредитный конвейер)" processRef="Process_Bank" />
 
-    <!-- Потоки сообщений (Message Flows) между Клиентом и Банком -->
     <bpmn:messageFlow id="MsgFlow_SubmitApp" name="Заявка + согласие БКИ" sourceRef="Task_Client_Submit" targetRef="StartEvent_Bank_Receive" />
-    <bpmn:messageFlow id="MsgFlow_SendOffer" name="Предодобренная оферта" sourceRef="Task_OMS_ShowOffer" targetRef="Event_Client_ReceiveOffer" />
-    <bpmn:messageFlow id="MsgFlow_SendRejection" name="Уведомление об отказе" sourceRef="Task_OMS_NotifyReject" targetRef="Event_Client_ReceiveReject" />
+    <bpmn:messageFlow id="MsgFlow_SendOffer" name="Оферта" sourceRef="Task_OMS_ShowOffer" targetRef="Event_Client_ReceiveOffer" />
+    <bpmn:messageFlow id="MsgFlow_SendRejection" name="Отказ" sourceRef="Task_OMS_NotifyReject" targetRef="Event_Client_ReceiveReject" />
     <bpmn:messageFlow id="MsgFlow_SignPEP" name="СМС-код (ПЭП)" sourceRef="Task_Client_Sign" targetRef="Event_OMS_ReceiveSign" />
     <bpmn:messageFlow id="MsgFlow_MoneyNotice" name="Пуш о зачислении" sourceRef="Task_ABS_Disburse" targetRef="EndEvent_Client_Success" />
   </bpmn:collaboration>
 
-  <!-- ПРОЦЕСС КЛИЕНТА -->
   <bpmn:process id="Process_Client" isExecutable="false">
     <bpmn:startEvent id="StartEvent_Client" name="Потребность в кредите">
       <bpmn:outgoing>Flow_C1</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:userTask id="Task_Client_Submit" name="Выбрать сумму, срок и отправить заявку">
+    <bpmn:userTask id="Task_Client_Submit" name="Выбрать сумму, срок и подать заявку">
       <bpmn:incoming>Flow_C1</bpmn:incoming>
       <bpmn:outgoing>Flow_C2</bpmn:outgoing>
     </bpmn:userTask>
@@ -46,7 +44,7 @@
       <bpmn:outgoing>Flow_C6</bpmn:outgoing>
       <bpmn:messageEventDefinition />
     </bpmn:intermediateCatchEvent>
-    <bpmn:userTask id="Task_Client_Sign" name="Подписать договор кодом ПЭП">
+    <bpmn:userTask id="Task_Client_Sign" name="Подписать договор ПЭП">
       <bpmn:incoming>Flow_C6</bpmn:incoming>
       <bpmn:outgoing>Flow_C7</bpmn:outgoing>
     </bpmn:userTask>
@@ -63,7 +61,6 @@
     <bpmn:sequenceFlow id="Flow_C7" sourceRef="Task_Client_Sign" targetRef="EndEvent_Client_Success" />
   </bpmn:process>
 
-  <!-- ПРОЦЕСС БАНКА -->
   <bpmn:process id="Process_Bank" isExecutable="true">
     <bpmn:laneSet id="LaneSet_Bank">
       <bpmn:lane id="Lane_OMS" name="Фронт-офис / ДБО и OMS">
@@ -94,28 +91,27 @@
         <bpmn:flowNodeRef>Task_ABS_Disburse</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EndEvent_Bank_IssuedOnline</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_Courier" name="Курьерская служба (Представитель)">
+      <bpmn:lane id="Lane_Courier" name="Курьерская служба">
         <bpmn:flowNodeRef>Task_Courier_KYC</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Courier_Activate</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>EndEvent_Bank_IssuedOffline</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
 
-    <!-- Элементы дорожки OMS -->
     <bpmn:startEvent id="StartEvent_Bank_Receive" name="Заявка получена">
       <bpmn:outgoing>Flow_B1</bpmn:outgoing>
       <bpmn:messageEventDefinition />
     </bpmn:startEvent>
-    <bpmn:serviceTask id="Task_OMS_Register" name="Зарегистрировать заявку (application_id)">
+    <bpmn:serviceTask id="Task_OMS_Register" name="Зарегистрировать заявку">
       <bpmn:incoming>Flow_B1</bpmn:incoming>
       <bpmn:outgoing>Flow_B2</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:exclusiveGateway id="Gateway_CheckClient" name="Клиент идентифицирован (is_identified)?">
+    <bpmn:exclusiveGateway id="Gateway_CheckClient" name="Действующий?">
       <bpmn:incoming>Flow_B2</bpmn:incoming>
       <bpmn:outgoing>Flow_Existing</bpmn:outgoing>
       <bpmn:outgoing>Flow_NewClient</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:serviceTask id="Task_OMS_FillProfile" name="Создать профиль по анкете / ЕСИА">
+    <bpmn:serviceTask id="Task_OMS_FillProfile" name="Создать профиль (ЕСИА)">
       <bpmn:incoming>Flow_NewClient</bpmn:incoming>
       <bpmn:outgoing>Flow_NewMerged</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -125,56 +121,67 @@
       <bpmn:outgoing>Flow_ToSPR</bpmn:outgoing>
     </bpmn:exclusiveGateway>
 
-    <!-- Элементы дорожки СПР и ML -->
-    <bpmn:parallelGateway id="Gateway_ParallelSplit" name="Параллельный опрос">
+    <bpmn:parallelGateway id="Gateway_ParallelSplit">
       <bpmn:incoming>Flow_ToSPR</bpmn:incoming>
       <bpmn:outgoing>Flow_ToBKI</bpmn:outgoing>
       <bpmn:outgoing>Flow_ToGos</bpmn:outgoing>
       <bpmn:outgoing>Flow_ToAF</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:serviceTask id="Task_SPR_BKI" name="Запросить кредитную историю (БКИ)">
+    <bpmn:serviceTask id="Task_SPR_BKI" name="Запрос в БКИ">
       <bpmn:incoming>Flow_ToBKI</bpmn:incoming>
       <bpmn:outgoing>Flow_FromBKI</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Task_SPR_Gosuslugi" name="Получить доходы (СФР / ФНС)">
+    <bpmn:serviceTask id="Task_SPR_Gosuslugi" name="Доходы (СФР/ФНС)">
       <bpmn:incoming>Flow_ToGos</bpmn:incoming>
       <bpmn:outgoing>Flow_FromGos</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="Task_SPR_Antifraud" name="Проверить Device ID и SIM (Антифрод)">
+    <bpmn:serviceTask id="Task_SPR_Antifraud" name="Антифрод (SIM/Device)">
       <bpmn:incoming>Flow_ToAF</bpmn:incoming>
       <bpmn:outgoing>Flow_FromAF</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:parallelGateway id="Gateway_ParallelJoin" name="Агрегация данных">
+    <bpmn:parallelGateway id="Gateway_ParallelJoin">
       <bpmn:incoming>Flow_FromBKI</bpmn:incoming>
       <bpmn:incoming>Flow_FromGos</bpmn:incoming>
       <bpmn:incoming>Flow_FromAF</bpmn:incoming>
       <bpmn:outgoing>Flow_ToML</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:serviceTask id="Task_ML_Scoring" name="Рассчитать PD, ПДН, лимит и ставку">
+    <bpmn:serviceTask id="Task_ML_Scoring" name="ML-скоринг (PD, ПДН)">
       <bpmn:incoming>Flow_ToML</bpmn:incoming>
       <bpmn:outgoing>Flow_ToDecision</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:exclusiveGateway id="Gateway_ScoringDecision" name="Заявка одобрена?">
+    <bpmn:exclusiveGateway id="Gateway_ScoringDecision" name="Одобрено?">
       <bpmn:incoming>Flow_ToDecision</bpmn:incoming>
       <bpmn:outgoing>Flow_Rejected</bpmn:outgoing>
       <bpmn:outgoing>Flow_Approved</bpmn:outgoing>
     </bpmn:exclusiveGateway>
 
-    <!-- Ветка отказа -->
-    <bpmn:sendTask id="Task_OMS_NotifyReject" name="Отправить отказ клиенту">
+    <bpmn:sendTask id="Task_OMS_NotifyReject" name="Отправить отказ">
       <bpmn:incoming>Flow_Rejected</bpmn:incoming>
       <bpmn:outgoing>Flow_EndReject</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:endEvent id="EndEvent_Bank_Rejected" name="Отказ зафиксирован">
+    <bpmn:endEvent id="EndEvent_Bank_Rejected" name="Отказ">
       <bpmn:incoming>Flow_EndReject</bpmn:incoming>
     </bpmn:endEvent>
 
-    <!-- Ветка одобрения и подписания -->
-    <bpmn:sendTask id="Task_OMS_ShowOffer" name="Отобразить оферту в приложении">
+    <bpmn:sendTask id="Task_OMS_ShowOffer" name="Показать оферту">
       <bpmn:incoming>Flow_Approved</bpmn:incoming>
       <bpmn:outgoing>Flow_WaitSign</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:receiveTask id="Event_OMS_ReceiveSign" name="Получить подтверждение ПЭП">
+    <bpmn:receiveTask id="Event_OMS_ReceiveSign" name="Получить ПЭП">
       <bpmn:incoming>Flow_WaitSign</bpmn:incoming>
       <bpmn:outgoing>Flow_Signed</bpmn:outgoing>
     </bpmn:receiveTask>
+    <bpmn:boundaryEvent id="BoundaryEvent_SignTimeout" name="24ч" attachedToRef="Event_OMS_ReceiveSign">
+      <bpmn:outgoing>Flow_Expired</bpmn:outgoing>
+      <bpmn:timerEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:endEvent id="EndEvent_Bank_Expired" name="Аннулировано">
+      <bpmn:incoming>Flow_Expired</bpmn:incoming>
+    </bpmn:endEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_DisbursementType" name="Сценарий А?">
+      <bpmn:incoming>Flow_Signed</bpmn:incoming>
+      <bpmn:outgoing>Flow_ScenarioA</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ScenarioB</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+
